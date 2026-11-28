@@ -1,7 +1,7 @@
 ---
 name: dev-high
 description: >
-  Opus dev worker at high effort — for a chunk the Lead flags with a reason from worker-dispatch.md § Choosing the worker (money, multi-path promises, retries, plans).
+  Dev worker at high effort (Opus) — for a chunk the Lead flags with a reason from worker-dispatch.md § Choosing the worker (money, multi-path promises, retries, plans).
 model: opus
 effort: high
 ---

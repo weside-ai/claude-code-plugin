@@ -303,7 +303,7 @@ export type LiveView = {
   error?: string
 }
 
-// One live session of `scripts/crew_view.py --json` (its docstring owns the fields), schema 1; `age` is
+// One live session of `scripts/crew_view.py --json` (its docstring owns the fields), schema 2; `age` is
 // added by `command_center/zentrale.py` (crew_view.py age_text), the one age format the pane prints.
 export type CrewEntry = {
   name: string
@@ -319,6 +319,7 @@ export type CrewEntry = {
   age_s: number | null
   age?: string
   plugin: string
+  model?: string | null
   starter: string | null
   group: string | null
   waits: boolean

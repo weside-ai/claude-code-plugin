@@ -12,7 +12,8 @@ Contract and Lead steps: `references/worker-dispatch.md` § Worker launch backen
 
 Template grammar: split like a shell line (`shlex`), then a token that is exactly `{name}`,
 `{agent}` or `{brief}` becomes that value as one argv element, `{lane}` becomes `--utility` for a
-utility start (`launch --utility`) and vanishes for a build start. Any other `{…}` refuses, so is a
+utility start (`launch --utility`) and vanishes for a build start, `{model}` becomes
+`--model=<model>` for `launch --model <model>` and vanishes without one. Any other `{…}` refuses, so is a
 placeholder inside a token (`--x={name}`). `{name}` and `{brief}` are required. `{brief}` is the
 one-line prompt `Read <git-dir>/we-brief.md and follow it.`: the brief never passes through a
 shell. The command runs without a shell, cwd = the worker's worktree.
@@ -125,6 +126,7 @@ Usage:
                                                    without --apply, which appends one line per
                                                    recovered worker with `backfill: <source>`
   worker_launch.py launch --worktree <wt> --name <n> --brief-file <f> [--agent <we:dev-…>] [--utility]
+                          [--model sonnet|opus]
   worker_launch.py stop --name <n> [--worktree <wt>] exit 0 stopped · 1 failed · 3 still running;
                                                    with --worktree it removes marker and brief;
                                                    several sessions of that name all stop (ids
@@ -151,7 +153,7 @@ import sys
 import time
 from pathlib import Path
 
-PLACEHOLDERS = ("name", "agent", "brief", "lane")
+PLACEHOLDERS = ("name", "agent", "brief", "lane", "model")
 REQUIRED = ("name", "brief")
 SUBAGENT = "subagent"
 MARKER = "we-worker.json"
@@ -1366,7 +1368,8 @@ def apply_context(doc: dict, repo: Path) -> dict:
     """Lean settings from `workers.context` of the repo's `.weside/config.json`; without the block
     the document stays as it is. `disable_plugins` → `enabledPlugins`
     false, `deny_mcp_servers` → `deniedMcpServers` by `serverName`, `auto_compact_window` →
-    `autoCompactWindow`, `deny_tools` → bare tool names appended to `permissions.deny` after the
+    `autoCompactWindow`, `advisor_model` → `advisorModel` (the worker's advisor apart from the
+    session-wide one; the model the worker works on stays `--model`), `deny_tools` → bare tool names appended to `permissions.deny` after the
     never-list (a bare-name deny drops the tool's schema from the context), `skills_off` →
     `skillOverrides` `off` (built-in, user and project skills; a plugin skill goes only with its
     plugin). A brief's `Needs:` line gives an entry of the last two back (`give_back`)."""
@@ -1389,6 +1392,11 @@ def apply_context(doc: dict, repo: Path) -> dict:
                 f"workers.context.auto_compact_window: a number of tokens {low}-{high}", 2
             )
         doc["autoCompactWindow"] = window
+    advisor = ctx.get("advisor_model")
+    if advisor is not None:
+        if not isinstance(advisor, str) or not advisor.strip():
+            raise LaunchError("workers.context.advisor_model: needs a model name", 2)
+        doc["advisorModel"] = advisor.strip()
     tools = _names(ctx, "deny_tools")
     if tools:
         deny = doc.setdefault("permissions", {}).setdefault("deny", [])
@@ -1841,7 +1849,9 @@ def brief_hook(path: Path) -> str:
     return "printf '%s\\n' " + shlex.quote(json.dumps(payload, ensure_ascii=False))
 
 
-def _template_carries(tokens: list[str], agent: str | None, utility: bool) -> None:
+def _template_carries(
+    tokens: list[str], agent: str | None, utility: bool, model: str | None = None
+) -> None:
     """Refuse a template with `{agent}` but no agent; warn when it drops `--agent`, or when a
     `we-worker` template drops `--utility` (a `claude --bg` worker carries its lane in its settings)."""
     if "{agent}" in tokens and not agent:
@@ -1858,14 +1868,26 @@ def _template_carries(tokens: list[str], agent: str | None, utility: bool) -> No
             "launcher counts the worker in the build lane; add `{lane}` to the template",
             file=sys.stderr,
         )
+    if model and "{model}" not in tokens:
+        raise LaunchError(
+            f"--model {model}: the template has no {{model}}, the worker would run on the agent's "
+            "model; add `{model}` to the template",
+            2,
+        )
 
 
 def launch(
-    worktree: Path, name: str, brief_file: Path, agent: str | None = None, utility: bool = False
+    worktree: Path,
+    name: str,
+    brief_file: Path,
+    agent: str | None = None,
+    utility: bool = False,
+    model: str | None = None,
 ) -> Path:
     """Start one worker through the template; `utility` starts it in the utility lane: `{lane}`
     becomes `--utility` (a `we-worker` template counts it there), and a `claude --bg` worker's
-    settings carry the lane."""
+    settings carry the lane. `model` becomes `{model}` as `--model=<model>`: it beats the agent
+    file's `model:` (measured 28.11.2026)."""
     try:
         brief = brief_file.read_text()
     except OSError as exc:
@@ -1878,7 +1900,7 @@ def launch(
             'agents.worker_launch is `subagent`: dispatch with Agent(isolation="worktree")', 2
         )
     tokens = validate(template)
-    _template_carries(tokens, agent, utility)
+    _template_carries(tokens, agent, utility, model)
     lane = UTILITY if utility else BUILD
     gd = git_dir(worktree)
     if gd is None:
@@ -1905,6 +1927,7 @@ def launch(
             "agent": agent or "",
             "brief": f"Read {brief_path} and follow it.",
             "lane": "--utility" if utility else None,
+            "model": f"--model={model}" if model else None,
         },
     )
     if Path(argv[0]).name == "claude" and "--bg" in argv and "--settings" not in argv:
@@ -2167,6 +2190,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--brief-file", type=Path, required=True)
     p.add_argument("--agent")
     p.add_argument("--utility", action="store_true")
+    p.add_argument("--model")
     p = sub.add_parser("stop")
     p.add_argument("--name", required=True)
     p.add_argument("--worktree", type=Path)
@@ -2353,7 +2377,12 @@ def main(argv: list[str] | None = None) -> int:
             code = _tree_verbs(args)
         elif args.cmd == "launch":
             marker = launch(
-                args.worktree.resolve(), args.name, args.brief_file, args.agent, args.utility
+                args.worktree.resolve(),
+                args.name,
+                args.brief_file,
+                args.agent,
+                args.utility,
+                args.model,
             )
             print(f"launched: {args.name} · marker {marker}")
         elif args.cmd == "stop":

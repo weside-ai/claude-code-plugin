@@ -28,8 +28,16 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   27.09.2026). The Lead writes the reason as one line in `description`; no reason, no `dev-high`
   (01.10.2026: 9 of 121 dispatches named none). A clearly bounded single fix stays medium: the bench
   (n = 27) found no difference there, and high costs about a third more time and money.
-- Implementation never runs on Sonnet (owner 27.09.2026). `model: "haiku"` or `"sonnet"` only for a
-  chunk the Lead names mechanical (a rename, a generated file, a gate run).
+- **Model of a worker a master starts** (owner 28.11.2026): Sonnet 5.5 for a normal chunk, Opus 5.5
+  for a demanding one; demanding is a chunk with a `dev-high` reason from the list above. The master
+  picks it at the start: `we-worker <name> --bg --model sonnet "<brief>"` (the brief stays the last
+  argument), through a template `worker_launch.py launch … --model sonnet`; `--model` beats the
+  agent file's `model: opus` (measured 28.11.2026), the agent keeps setting the effort. The rule
+  covers only those workers: the master itself, companion sessions and lens agents stay on Opus. The
+  choice is the master's, no gate checks it; what the worker really ran on is read from its
+  transcript, never from the brief: `model=` in `we-worker status`, the model in the Zentrale's
+  section Working (`crew_view.py`) and the PR body's `Model:` line (`/we:pr`). `haiku` only for a
+  chunk the master names mechanical (a rename, a generated file, a gate run).
 - Codex is not a dispatch backend; it reviews advisory only (owner 30.09.2026).
 - One implementer per phase group by default. Measured over 18 runs (16.10.2026): an integrate merge
   costs ~15–20 min; the real cost of parallel work is the loop after the push (main merges, a second
@@ -80,7 +88,8 @@ template in force; the master's boot check and `/we:accept` read it there.
   `Read <git-dir>/we-brief.md and follow it.`), `{agent}` (the `we:dev-*` agent, as `--agent
   {agent}`, so its effort and model apply), `{lane}` (`--utility` for `launch --utility`, nothing
   for a build start; a `we-worker` template only: a `claude` template with it is refused, its
-  worker's settings file carries the lane). Example: `"claude --bg -n {name} --agent {agent}
+  worker's settings file carries the lane), `{model}` (`--model=<model>` for `launch --model`,
+  nothing without; a `--model` into a template without it is refused). Example: `"claude --bg -n {name} --agent {agent}
   {brief}"`. The command starts the worker in the Lead's permission mode, or Claude Code may hold
   the Lead's messages for approval. With `we-worker`, the crew's `launch.worker_mode: bypass` starts
   a `--bg` worker in bypass (`default`: no `--permission-mode`), a window worker keeps its default
@@ -218,6 +227,7 @@ file stays rights, `env` and that line. Keys (`worker_launch.py apply_context` o
 | `disable_plugins: ["<plugin>@<marketplace>"]` | `enabledPlugins: {<id>: false}` |
 | `deny_mcp_servers: ["<server>"]` | `deniedMcpServers: [{"serverName": <server>}]` |
 | `auto_compact_window: <tokens>` | `autoCompactWindow` (100000–1000000) |
+| `advisor_model: "<model>"` | `advisorModel`: the workers' advisor apart from the one in the user settings; the model a worker works on stays `--model` |
 | `deny_tools: ["<tool>"]` | the bare names appended to `permissions.deny` after the never-list: the tool's schema leaves the context |
 | `skills_off: ["<skill>"]` | `skillOverrides: {<skill>: "off"}`: built-in, user and project skills; a plugin skill goes only with its plugin |
 
@@ -261,7 +271,7 @@ With a template, the Lead:
    a worktree of a trusted repo is trusted (measured 31.10.2026), a fresh scratch repo is not.
 2. Writes the brief to a file and runs `worker_launch.py launch --worktree <wt> --name <name>
    --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`;
-   `--utility` for a member of § Utility lane). It puts `Lead: <this session's name>` as the brief's first line
+   `--utility` for a member of § Utility lane; `--model sonnet|opus` per § Choosing the worker). It puts `Lead: <this session's name>` as the brief's first line
    (an unnamed Lead is refused: `/rename <KEY>` first), writes the marker `we-worker.json` into the
    worktree's git dir and runs the command there.
 3. Subscribes with `notify_when_idle: true` on its first message to the worker, again on each
@@ -326,6 +336,8 @@ arms; it may run the ready merge line `arm_pr.sh` prints (the worker card).
   trailers above.
   - Bad: `Co-Authored-By: …` alone: three workers on one story read the same.
   - Good: `Worker: AB-12-fix · 0f3c9a1e-… · started-by ab-master`.
+  Above it the PR body carries `Model: <id>`, printed by
+  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/command_center/transcript.py model` from the worker's own transcript.
 - Tests: only the ones `references/test-economy.md` asks for (which defect does this test catch
   that no existing test catches?); no test per endpoint, page or review round by default.
 - Local gates: the repo's linter, formatter and type-checker on the changed files, plus only the

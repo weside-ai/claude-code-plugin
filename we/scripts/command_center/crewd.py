@@ -92,7 +92,7 @@ HEADERS = {
 
 ROW_FIELDS = ("kind", "item", "title", "holder", "for", "master", "age", "since_note", "classes")
 SESSION_FIELDS = ("name", "role", "doing", "age", "waits", "waiting_on", "blocked_kind", "starter")
-SESSION_FIELDS += ("plugin",)
+SESSION_FIELDS += ("plugin", "model")
 ACCOUNT_FIELDS = ("name", "active", "in_rotation", "threshold", "status", "stale", "red")
 PR_ITEM = re.compile(r"([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)#([0-9]{1,7})")
 
@@ -372,6 +372,8 @@ def _session_html(s: dict) -> str:
         else ""
     )
     meta = f"{s.get('role') or ''} · since {s.get('age') or '?'}{waits} · {s.get('plugin') or ''}"
+    if s.get("model"):
+        meta += f" · {s['model']}"
     if s.get("starter"):
         meta += f" · started by {s['starter']}"
     cls = "row waits" if s.get("waits") else "row"
