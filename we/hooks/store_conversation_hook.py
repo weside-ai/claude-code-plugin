@@ -278,17 +278,18 @@ def _is_idle_notification(body: str) -> bool:
 
 
 def _is_noise_prompt(text: str) -> bool:
-    """A turn started by the harness, not by a person or another session's message.
+    """Text rules for a turn started by the harness, not by a person or a session's message.
 
-    ``text`` has its system reminders stripped already. Noise: empty (the prompt was
-    system reminders only), a goal Stop hook's feedback or check-in, the compact
-    continuation summary, a background task's ``<task-notification>``, and an idle notice (``idle_notification`` JSON, bare or in
-    ``<teammate-message>`` blocks, or a ``[Cross-session idle notice]``). A teammate or
-    cross-session message with content is real progress and is kept.
+    The fallback where the entry carries no ``origin`` (``_origin_verdict``). ``text`` has its
+    system reminders stripped already. Noise: empty (the prompt was system reminders only), a
+    goal Stop hook's feedback or check-in, the compact continuation summary, a background
+    task's ``<task-notification>``, an idle notice (``idle_notification`` JSON, bare or in
+    ``<teammate-message>`` blocks, or a ``[Cross-session idle notice]``), a cross-session
+    prompt without its ``<cross-session-message>`` envelope, and an envelope with a
+    ``from-plugin`` attribute (a plugin's relay). A teammate or cross-session message with
+    content is real progress and is kept.
     """
-    if not text:
-        return True
-    if text.startswith(
+    if not text or text.startswith(
         (
             "Stop hook feedback:",
             "Goal check-in:",
@@ -298,6 +299,11 @@ def _is_noise_prompt(text: str) -> bool:
     ):
         return True
     if not _TASK_NOTIFICATION.sub("", text).strip():
+        return True
+    envelopes = list(_ENVELOPE.finditer(text))
+    if text.startswith(_CROSS_SESSION_PREFIX) and not envelopes:
+        return True
+    if any("from-plugin" in _attr_names(m.group(2)) for m in envelopes):
         return True
     body = text[len(_CROSS_SESSION_PREFIX) :] if text.startswith(_CROSS_SESSION_PREFIX) else text
     blocks = _TEAMMATE_MESSAGE.findall(body)
@@ -313,6 +319,10 @@ _ENVELOPE_SPEAKER = {
     "cross-session-message": (("from-name", "from"), "another Claude Code session"),
     "teammate-message": (("teammate_id",), "an agent of this session's team"),
 }
+
+
+def _attr_names(attrs: str) -> set[str]:
+    return {k for k, _ in _ATTR.findall(attrs)}
 
 
 def attribute_prompt(text: str) -> str:
@@ -399,6 +409,31 @@ def _is_command_expansion(entry: dict, text: str) -> bool:
     )
 
 
+def _origin_verdict(entry: dict) -> bool | None:
+    """True: store the turn, False: store nothing, None: no decision, the text rules decide.
+
+    Claude Code marks each user entry with its ``origin``: the human's typed turn
+    (``human``) and a session's own named message (``peer`` without ``plugin``) store; a
+    socket delivery without a sender (``peer`` from ``unknown``: digests, red/green lines,
+    prompts), a plugin relay (``peer`` with ``plugin``), a ``plugin`` line, a
+    ``task-notification`` and an ``auto-continuation`` are automatic and store nothing.
+    Without ``origin``, a ``wakeupSource`` marks a scheduled prompt.
+    """
+    origin = entry.get("origin")
+    if not isinstance(origin, dict):
+        return False if entry.get("wakeupSource") else None
+    kind = origin.get("kind")
+    if kind == "human":
+        return True
+    if kind == "peer":
+        if origin.get("plugin") or origin.get("from") in (None, "", "unknown"):
+            return False
+        return None  # a named session: the text rules still drop its idle notices
+    if kind in ("plugin", "task-notification", "auto-continuation"):
+        return False
+    return None
+
+
 def get_last_user_message(transcript_path: str) -> str | None:
     """The prompt that started the last turn, system reminders stripped; None for a noise turn.
 
@@ -408,7 +443,8 @@ def get_last_user_message(transcript_path: str) -> str | None:
     command's expansion (a skill body or a meta entry right after a ``<command-name>``
     echo) is replaced by the command the human typed (``/we:materialize Nox``); a skill
     body without an echo (the model invoked the skill mid-turn) is walked past to the
-    turn's prompt.
+    turn's prompt. Who started the turn is decided here, by ``_origin_verdict`` first and
+    the text rules (``_is_noise_prompt``) where the entry has no ``origin``.
     """
     try:
         with open(transcript_path) as f:
@@ -430,7 +466,10 @@ def get_last_user_message(transcript_path: str) -> str | None:
                 return _typed_command(echo)
             if is_skill_body:
                 continue
-        return None if _is_noise_prompt(text) else text
+        verdict = _origin_verdict(entry)
+        if verdict is None:
+            verdict = not _is_noise_prompt(text)
+        return text if verdict and text else None
 
     return None
 

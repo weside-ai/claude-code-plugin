@@ -370,6 +370,52 @@ class TurnPromptFilterTest(unittest.TestCase):
         )
         self.assertEqual(self.prompt(_user(msg)), msg)
 
+    def test_origin_human_is_stored(self):
+        typed = "Please check the staging deploy and tell me what the next release step is."
+        self.assertEqual(self.prompt(_user(typed, origin={"kind": "human"})), typed)
+
+    def test_origin_named_peer_is_stored(self):
+        msg = (
+            "Another Claude session sent a message:\n"
+            '<cross-session-message from="uds:/tmp/s.sock" from-name="infra">\n'
+            "Maintenance done, the staging cluster is back.\n</cross-session-message>"
+        )
+        peer = {"kind": "peer", "from": "uds:/tmp/s.sock", "name": "infra"}
+        self.assertEqual(self.prompt(_user(msg, origin=peer, isMeta=True)), msg)
+
+    def test_origin_peer_from_unknown_is_skipped(self):
+        # Red arm: a digest line from a socket without a sender.
+        for line in (
+            "digest (3): PR #12 green, main red since 09:10",
+            "main red: Plugin Tests failed on 3b9ccba",
+            "we-worker: your limit is at 15:22Z, report once",
+        ):
+            self.assert_skipped(_user(line, origin={"kind": "peer", "from": "unknown"}))
+
+    def test_origin_peer_with_plugin_is_skipped(self):
+        relay = "Q1234: Vorschlag — accept the copy for the queue, then merge the plugin PR."
+        self.assert_skipped(
+            _user(relay, origin={"kind": "peer", "from": "uds:/x", "name": "s", "plugin": "we"})
+        )
+
+    def test_origin_plugin_task_notification_and_auto_continuation_are_skipped(self):
+        answer = "Q1234: accept — copy for the queue, merge the plugin PR when green."
+        self.assert_skipped(_user(answer, origin={"kind": "plugin", "name": "we", "asUser": True}))
+        self.assert_skipped(_user(answer, origin={"kind": "task-notification"}))
+        self.assert_skipped(_user(answer, origin={"kind": "auto-continuation"}))
+
+    def test_wakeup_source_without_origin_is_skipped(self):
+        self.assert_skipped(_user("Limit-Weckrunde: check the open items.", wakeupSource="cron"))
+
+    def test_envelope_less_cross_session_prompt_and_from_plugin_are_noise(self):
+        self.assert_skipped(_user("Another Claude session sent a message:\nmain red again"))
+        relay = (
+            "Another Claude session sent a message:\n"
+            '<cross-session-message from="uds:/x" from-name="s" from-plugin="we">\n'
+            "Q1234: Vorschlag for the queue.\n</cross-session-message>"
+        )
+        self.assert_skipped(_user(relay))
+
     def test_command_echo_is_walked_past_as_before(self):
         echo = _user("<local-command-stdout>Login successful</local-command-stdout>")
         self.assertEqual(self.prompt(echo), REAL)
