@@ -672,7 +672,7 @@ def lives(row: dict) -> bool:
     return pid.isdigit() and int(pid) > 0 and wl._pid_lives(pid)
 
 
-STATUS_SCHEMA_VERSION = 1
+STATUS_SCHEMA_VERSION = 2
 
 
 def status_records(

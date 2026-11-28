@@ -55,7 +55,7 @@ def test_dead_and_limited_workers(tmp_path):
     transcript(tmp_path, "s3", {"isApiErrorMessage": True, "error": "authentication_failed"})
     text_before = run(tmp_path, rows).stdout
     doc = json.loads(run(tmp_path, rows, "--json").stdout)
-    assert doc["schema_version"] == 1
+    assert doc["schema_version"] == 2
     assert [list(w) for w in doc["workers"]] == [FIELDS] * 4  # the snapshot of its fields
     red = ci_state.worker_rows(doc["workers"], UNTIL)
     assert [(r["item"], r["classes"]) for r in red] == [
@@ -71,6 +71,6 @@ def test_dead_and_limited_workers(tmp_path):
     assert again[:-1] == text_before.splitlines()[:-1]
     assert again[-1].startswith("room for both lanes: ")
     lines = text_before.splitlines()
-    assert lines[0] == f"s1 w-exit pid={DEAD_PID} exited(idle) last=11:40"
+    assert lines[0] == f"s1 w-exit pid={DEAD_PID} exited(idle) last=11:40 model=?"
     assert lines[2] == "  resume after the reset: we-worker w-limit --bg --resume s2"
-    assert lines[-2] == f"s4 w-live pid={os.getpid()} idle last=-"
+    assert lines[-2] == f"s4 w-live pid={os.getpid()} idle last=- model=?"

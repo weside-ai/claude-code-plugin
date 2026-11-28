@@ -143,7 +143,7 @@ def test_backend_defaults_to_subagent(env, tmp_path):
 @pytest.mark.parametrize(
     ("template", "message"),
     [
-        ("x {name} {brief} {model}", "unknown placeholder {model}"),
+        ("x {name} {brief} {effort}", "unknown placeholder {effort}"),
         ("x {name}", "placeholder {brief} is required"),
         ("x --n={name} {brief}", "must be a token of its own"),
         ("x 'unterminated {name} {brief}", "cannot split"),
@@ -258,6 +258,25 @@ def test_a_launcher_template_brings_its_own_settings(env, tmp_path):
     wl.launch(env["wt"], "KEY-1-w2", env["brief"], utility=True)
     argv = [c["argv"] for c in _calls(env) if "--bg" in c["argv"]][-1]
     assert argv[argv.index("KEY-1-w2") + 1] == "--utility"
+
+
+def test_a_template_start_hands_the_masters_model_choice_on(env, tmp_path):
+    """The master picks Sonnet or Opus per worker (owner 28.11.2026); a crew starts its workers
+    through the template, which had no way to pass it (Claude Review on the PR): `{model}` becomes
+    `--model=<m>` and vanishes without one; a `--model` into a template without it refuses."""
+    stub = tmp_path / "bin" / "we-worker"
+    stub.write_text((tmp_path / "bin" / "claude").read_text())
+    stub.chmod(0o755)
+    env["configure"]("we-worker --bg -n {name} {model} {brief}")
+    wl.launch(env["wt"], "KEY-1-w1", env["brief"], model="sonnet")
+    assert "--model=sonnet" in _launch_call(env)["argv"]
+    wl.launch(env["wt"], "KEY-1-w2", env["brief"])
+    argv = [c["argv"] for c in _calls(env) if "--bg" in c["argv"]][-1]
+    assert not [a for a in argv if a.startswith("--model") or a == ""]
+    env["configure"]("we-worker --bg -n {name} {brief}")
+    with pytest.raises(wl.LaunchError, match=r"no \{model\}") as exc:
+        wl.launch(env["wt"], "KEY-1-w3", env["brief"], model="opus")
+    assert exc.value.code == 2
 
 
 def test_a_pinned_lead_reads_and_starts_on_the_global_supervisor(env, monkeypatch):

@@ -1,7 +1,7 @@
 ---
 name: dev-medium
 description: >
-  Opus dev worker at medium effort — the default for every Claude build chunk. The Lead dispatches it unless it names a reason for dev-high.
+  Dev worker at medium effort (Opus; a master may start it on Sonnet, worker-dispatch.md) — the default for every Claude build chunk. The Lead dispatches it unless it names a reason for dev-high.
 model: opus
 effort: medium
 ---

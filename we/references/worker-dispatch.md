@@ -30,7 +30,9 @@ worker cannot rely on reading this file: the Lead's brief carries every rule the
   (n = 27) found no difference there, and high costs about a third more time and money.
 - **Model of a worker a master starts** (owner 28.11.2026): Sonnet 5.5 for a normal chunk, Opus 5.5
   for a demanding one; demanding is a chunk with a `dev-high` reason from the list above. The master
-  picks it at the start: `we-worker <name> --bg "<brief>" --model sonnet` or `--model opus`. The rule
+  picks it at the start: `we-worker <name> --bg --model sonnet "<brief>"` (the brief stays the last
+  argument), through a template `worker_launch.py launch … --model sonnet`; `--model` beats the
+  agent file's `model: opus` (measured 28.11.2026), the agent keeps setting the effort. The rule
   covers only those workers: the master itself, companion sessions and lens agents stay on Opus. The
   choice is the master's, no gate checks it; what the worker really ran on is read from its
   transcript, never from the brief: `model=` in `we-worker status`, the model in the Zentrale's
@@ -86,7 +88,8 @@ template in force; the master's boot check and `/we:accept` read it there.
   `Read <git-dir>/we-brief.md and follow it.`), `{agent}` (the `we:dev-*` agent, as `--agent
   {agent}`, so its effort and model apply), `{lane}` (`--utility` for `launch --utility`, nothing
   for a build start; a `we-worker` template only: a `claude` template with it is refused, its
-  worker's settings file carries the lane). Example: `"claude --bg -n {name} --agent {agent}
+  worker's settings file carries the lane), `{model}` (`--model=<model>` for `launch --model`,
+  nothing without; a `--model` into a template without it is refused). Example: `"claude --bg -n {name} --agent {agent}
   {brief}"`. The command starts the worker in the Lead's permission mode, or Claude Code may hold
   the Lead's messages for approval. With `we-worker`, the crew's `launch.worker_mode: bypass` starts
   a `--bg` worker in bypass (`default`: no `--permission-mode`), a window worker keeps its default
@@ -268,7 +271,7 @@ With a template, the Lead:
    a worktree of a trusted repo is trusted (measured 31.10.2026), a fresh scratch repo is not.
 2. Writes the brief to a file and runs `worker_launch.py launch --worktree <wt> --name <name>
    --agent <we:dev-…> --brief-file <file>` (`--agent` is required when the template has `{agent}`;
-   `--utility` for a member of § Utility lane). It puts `Lead: <this session's name>` as the brief's first line
+   `--utility` for a member of § Utility lane; `--model sonnet|opus` per § Choosing the worker). It puts `Lead: <this session's name>` as the brief's first line
    (an unnamed Lead is refused: `/rename <KEY>` first), writes the marker `we-worker.json` into the
    worktree's git dir and runs the command there.
 3. Subscribes with `notify_when_idle: true` on its first message to the worker, again on each
