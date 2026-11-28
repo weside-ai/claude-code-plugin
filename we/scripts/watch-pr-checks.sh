@@ -23,7 +23,8 @@
 #                     waits past `auto-merge off` and BLOCKED (no go yet) until MERGED or CLOSED;
 #                     only a conflict or a stale base (DIRTY, BEHIND) still ends it with exit 0 (as
 #                     does the merge: `final … merged`).
-#   --max-hours <h>   lifetime cap, default 6.
+#   --max-hours <h>   lifetime cap in hours, default 6; a decimal like 1.5 counts (exit 2 on a value
+#                     that is not a positive number).
 # Prints a failed or cancelled check once, when it concludes, and one final line:
 #   final <sha>: green · merge: <state>                     exit 0
 #   final <sha>: red · failed: <names> · merge: <state>     exit 1  (also on the first failure with --fail-fast;
@@ -138,6 +139,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$PR" ] || { echo "$USAGE" >&2; exit 2; }
+# Bash arithmetic takes whole numbers only: hours become seconds through awk, rounded.
+[[ "$MAX_HOURS" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]] && MAX_SECONDS=$(LC_ALL=C awk -v h="$MAX_HOURS" 'BEGIN { printf "%d", h * 3600 + 0.5 }') && [ "$MAX_SECONDS" -gt 0 ] ||
+  { echo "--max-hours wants a positive number of hours (e.g. 2 or 1.5), got: $MAX_HOURS" >&2; exit 2; }
 MIN_INTERVAL=${WATCH_MIN_INTERVAL:-60}
 INTERVAL=${WATCH_INTERVAL:-60}
 [ "$INTERVAL" -ge "$MIN_INTERVAL" ] 2>/dev/null || INTERVAL=$MIN_INTERVAL
@@ -157,7 +161,7 @@ MAX_INTERVAL=${WATCH_MAX_INTERVAL:-300}
 # Anchored on runner and registry phrasing, so a failing assertion on a 500 is no infra.
 INFRA_RX=${WATCH_INFRA_RX:-'HTTP/[0-9.]+ 50[0-9]|(returned|received|got|responded with)( status)?( code)? 50[0-9]|HTTP (error )?50[0-9]|50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)|ETIMEDOUT|ECONNRESET|i/o timeout|TLS handshake timeout|context deadline exceeded|Connection timed out'}
 QUOTA_RX=${WATCH_QUOTA_RX:-'quota|usage limit|rate[ -]limit(ed)?|credit balance|limit (reached|exceeded)|hit your .*limit'}
-LIFETIME=${WATCH_MAX_LIFETIME:-$((MAX_HOURS * 3600))}
+LIFETIME=${WATCH_MAX_LIFETIME:-$MAX_SECONDS}
 BORN=$(date +%s)
 
 # Line 1: the head SHA. Line 2: mergeStateStatus<TAB>mergeable<TAB>state<TAB>auto-merge on|off

@@ -751,6 +751,34 @@ def test_lifetime_cap_ends_the_watch(tmp_path):
     assert (code, out) == (9, [f"gave up after 1s on {SHA}"])
 
 
+@pytest.mark.parametrize("hours", ["1.5", "2"])
+def test_max_hours_takes_whole_and_decimal_hours(tmp_path, hours):
+    code, out = run(tmp_path, [_green()], "--max-hours", hours)
+    assert (code, out) == (0, [f"final {SHA}: green · {MERGE}"])
+
+
+def test_a_decimal_max_hours_is_the_lifetime_cap(tmp_path):
+    armed = {**_green(), "autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "BLOCKED"}
+    code, out = run(tmp_path, [armed], "--until-merged", "--max-hours", "0.0003")
+    assert (code, out) == (9, [f"gave up after 1s on {SHA}"])
+
+
+@pytest.mark.parametrize("hours", ["abc", "0", "-1", "1,5"])
+def test_max_hours_rejects_what_is_no_positive_number(tmp_path, hours):
+    res = subprocess.run(
+        ["bash", str(SCRIPT), "57", "--max-hours", hours],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=30,
+    )
+    assert res.returncode == 2
+    assert (
+        res.stderr.strip()
+        == f"--max-hours wants a positive number of hours (e.g. 2 or 1.5), got: {hours}"
+    )
+
+
 def test_until_merged_reports_a_green_pr_blocked_past_the_grace(tmp_path, monkeypatch):
     monkeypatch.setenv("WATCH_BLOCKED_GRACE", "0")
     armed = {**_green(), "autoMergeRequest": {"enabledAt": "x"}, "mergeStateStatus": "BLOCKED"}
